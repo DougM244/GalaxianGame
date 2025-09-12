@@ -4,7 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import random
 import os
-from menu import show_menu
+from menu import show_menu, show_game_over
 
 WIDTH, HEIGHT = 800, 600
 SHIP_WIDTH, SHIP_HEIGHT = 60, 20
@@ -400,9 +400,7 @@ def main():
         elif game_state == "start_game":
             game_state = run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture)
         elif game_state == "game_over":
-            print("Game Over! Voltando para o menu...")
-            pygame.time.wait(2000)
-            game_state = "menu"
+            game_state = show_game_over(bg_texture, clock)
     
     pygame.quit()
     quit()
