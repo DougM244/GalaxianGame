@@ -4,6 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import random
 import os
+import json
 from menu import show_menu, show_game_over
 
 WIDTH, HEIGHT = 800, 600
@@ -43,7 +44,7 @@ def draw_num(x, y, num, textures):
             glEnd()
             glDisable(GL_TEXTURE_2D)
             glDisable(GL_BLEND)
-            x += tex[1] + 2  # espaço entre os dígitos
+            x += tex[1] + 2
 
 class Ship:
     def __init__(self, texture=None, tex_w=60, tex_h=60, bullet_texture=None, bullet_tex_w=16, bullet_tex_h=16):
@@ -59,7 +60,7 @@ class Ship:
         self.bullet_texture = bullet_texture
         self.bullet_tex_w = bullet_tex_w
         self.bullet_tex_h = bullet_tex_h
-        self.som_tiro = None  # atributo para o som do tiro
+        self.som_tiro = None
 
     def move(self, dx):
         self.x += dx
@@ -76,11 +77,10 @@ class Ship:
         if self.cooldown > 0:
             self.cooldown -= 1
         for b in self.bullets:
-            b[1] += 5  # velocidade do tiro reduzida
+            b[1] += 5
         self.bullets = [b for b in self.bullets if b[1] < HEIGHT]
 
     def draw(self):
-        # Desenhar nave como textura OpenGL
         if self.texture:
             glEnable(GL_TEXTURE_2D)
             glBindTexture(GL_TEXTURE_2D, self.texture)
@@ -97,7 +97,6 @@ class Ship:
         else:
             glColor3f(0, 1, 1)
             glRectf(self.x-SHIP_WIDTH//2, self.y-SHIP_HEIGHT//2, self.x+SHIP_WIDTH//2, self.y+SHIP_HEIGHT//2)
-        # Desenhar tiros
         for b in self.bullets:
             if self.bullet_texture:
                 glEnable(GL_BLEND)
@@ -132,7 +131,7 @@ class Alien:
         self.bullet_texture = bullet_texture
         self.bullet_tex_w = bullet_tex_w
         self.bullet_tex_h = bullet_tex_h
-        self.som_tiro = None  # atributo para o som do tiro do alien
+        self.som_tiro = None
 
     def attack(self):
         self.attacking = True
@@ -142,7 +141,7 @@ class Alien:
 
     def update(self):
         if self.attacking and self.bullet:
-            self.bullet[1] -= 4  # velocidade do tiro do alien reduzida
+            self.bullet[1] -= 4
             if self.bullet[1] < 0:
                 self.attacking = False
                 self.bullet = None
@@ -209,27 +208,61 @@ def load_texture(filename, size=None):
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
     return tex_id, width, height
 
-def get_text_width(text, size=24):
-    font = pygame.font.SysFont('Arial', size)
-    text_surface = font.render(text, True, (255,255,255))
-    return text_surface.get_width()
+def save_highscores(scores):
+    with open('highscores.json', 'w') as f:
+        json.dump(scores, f)
 
-def draw_button(x, y, text, size=24, color=(255, 255, 255)):
-    font = pygame.font.SysFont('Arial', size)
-    text_surface = font.render(text, True, color)
-    text_data = pygame.image.tostring(text_surface, "RGBA", True)
-    width, height = text_surface.get_size()
-    
-    # Desenha o texto do botão
-    glRasterPos2i(x, HEIGHT - y - height)
-    glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
-    
-    return pygame.Rect(x, y, width, height)
+def load_highscores():
+    if os.path.exists('highscores.json'):
+        with open('highscores.json', 'r') as f:
+            return json.load(f)
+    return []
+
+def enter_initials_screen(bg_texture, clock, score):
+    initials = ['A', 'A', 'A']
+    selected_char = 0
+    run_initials = True
+
+    while run_initials:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                return "quit", score
+            if event.type == KEYDOWN:
+                if event.key == K_RETURN:
+                    highscores = load_highscores()
+                    highscores.append({'initials': ''.join(initials), 'score': score})
+                    highscores.sort(key=lambda x: x['score'], reverse=True)
+                    highscores = highscores[:10]
+                    save_highscores(highscores)
+                    return "game_over", score
+                if event.key == K_LEFT:
+                    selected_char = (selected_char - 1) % 3
+                if event.key == K_RIGHT:
+                    selected_char = (selected_char + 1) % 3
+                if event.key == K_UP:
+                    char_code = ord(initials[selected_char])
+                    char_code = char_code + 1 if char_code < ord('Z') else ord('A')
+                    initials[selected_char] = chr(char_code)
+                if event.key == K_DOWN:
+                    char_code = ord(initials[selected_char])
+                    char_code = char_code - 1 if char_code > ord('A') else ord('Z')
+                    initials[selected_char] = chr(char_code)
+        
+        glClear(GL_COLOR_BUFFER_BIT)
+        if bg_texture:
+            draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
+
+        draw_text(WIDTH // 2 - 160, HEIGHT // 2 - 100, "NEW HIGHSCORE!", size=48)
+        draw_text(WIDTH // 2 - 100, HEIGHT // 2 - 40, "Enter your initials:", size=24)
+        draw_text(WIDTH // 2 - 50, HEIGHT // 2 + 10, "".join(initials), size=48)
+        
+        x_pos_cursor = (WIDTH // 2 - 50) + (selected_char * 35) 
+        draw_text(x_pos_cursor, HEIGHT // 2 + 50, "_", size=48)
+
+        pygame.display.flip()
+        clock.tick(30)
 
 def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture):
-    """
-    Função principal que contém o loop do jogo.
-    """
     pygame.mixer.music.load('musica.mp3')
     pygame.mixer.music.play(-1)
 
@@ -240,13 +273,13 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
 
     if nave_texture:
         ship = Ship(texture=nave_texture[0], tex_w=nave_texture[1], tex_h=nave_texture[2],
-                    bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                    bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                    bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+                     bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
+                     bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
+                     bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
     else:
         ship = Ship(bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                    bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                    bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+                     bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
+                     bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
     ship.som_tiro = som_tiro
 
     aliens = []
@@ -279,79 +312,11 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
     nivel = 1
     
     clock = pygame.time.Clock()
-    paused = False
 
     while running:
         for event in pygame.event.get():
             if event.type == QUIT:
                 running = False
-            if event.type == KEYDOWN and event.key == K_ESCAPE:
-                paused = not paused
-                if paused:
-                    pygame.mixer.music.pause()
-                else:
-                    pygame.mixer.music.unpause()
-                    
-        if paused:
-            glClear(GL_COLOR_BUFFER_BIT)
-            if bg_texture:
-                draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
-            ship.draw()
-            for alien in aliens:
-                alien.draw()
-            if vidas_texture:
-                glEnable(GL_BLEND)
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                glEnable(GL_TEXTURE_2D)
-                glBindTexture(GL_TEXTURE_2D, vidas_texture[0])
-                for i in range(ship.lives):
-                    x = 20 + i*28
-                    y = HEIGHT-28
-                    glColor4f(1, 1, 1, 1)
-                    glBegin(GL_QUADS)
-                    glTexCoord2f(0, 0); glVertex2f(x, y)
-                    glTexCoord2f(1, 0); glVertex2f(x + vidas_texture[1], y)
-                    glTexCoord2f(1, 1); glVertex2f(x + vidas_texture[1], y + vidas_texture[2])
-                    glTexCoord2f(0, 1); glVertex2f(x, y + vidas_texture[2])
-                    glEnd()
-                glDisable(GL_TEXTURE_2D)
-                glDisable(GL_BLEND)
-
-            draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
-
-            glEnable(GL_BLEND)
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-            glColor4f(0, 0, 0, 0.5)
-            glBegin(GL_QUADS)
-            glVertex2f(0, 0); glVertex2f(WIDTH, 0)
-            glVertex2f(WIDTH, HEIGHT); glVertex2f(0, HEIGHT)
-            glEnd()
-            glDisable(GL_BLEND)
-
-            titulo = "PAUSADO"
-            draw_text(WIDTH//2 - get_text_width(titulo, 36)//2, HEIGHT//2 - 10, titulo, size=36)
-
-            subtitulo = "Pressione ESC para continuar"
-            draw_text(WIDTH//2 - get_text_width(subtitulo, 24)//2, HEIGHT//2 + 30, subtitulo, size=24)
-
-            voltar = "Voltar ao menu (Presione M)"
-            draw_text(WIDTH//2 - get_text_width(voltar, 28)//2, HEIGHT//2 + 80, voltar, size=28)
-
-            for e in pygame.event.get():
-                if e.type == QUIT:
-                    return "quit"
-                if e.type == KEYDOWN:
-                    if e.key == K_ESCAPE:
-                        paused = False
-                        pygame.mixer.music.unpause()
-                    elif e.key in (K_RETURN, K_m):
-                        pygame.mixer.music.stop()
-                        return "menu"
-
-            pygame.display.flip()
-            clock.tick(30)
-            continue
-        
         keys = pygame.key.get_pressed()
         if keys[K_LEFT]:
             ship.move(-5)
@@ -381,7 +346,7 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
             for alien in aliens:
                 if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
                     alien.alive = False
-                    ship.score += 100
+                    ship.score += 1
                     ship.bullets.remove(b)
                     som_explosao.play()
                     break
@@ -419,10 +384,13 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
             for i in range(ship.lives):
                 glColor3f(1, 0, 0)
                 glRectf(20 + i*25, HEIGHT-30, 35 + i*25, HEIGHT-10)
-        for i in range(ship.score // 200):
-            glColor3f(1, 1, 0)
-            glRectf(WIDTH-30 - i*15, HEIGHT-30, WIDTH-20 - i*15, HEIGHT-10)
+        
+        score_str = str(ship.score)
+        score_w = sum(numeros_texture[int(d)][1] + 2 for d in score_str)
+        draw_num(WIDTH - score_w - 20, HEIGHT - 40, ship.score, numeros_texture)
+        
         draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
+
         pygame.display.flip()
         clock.tick(30)
         if not any(a.alive for a in aliens):
@@ -438,18 +406,26 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
                     x = WIDTH//2 - largura_total//2 + i*espacamento_x
                     tex = random.choice(alien_textures) if alien_textures else None
                     alien = Alien(x, y,
-                        texture=tex[0] if tex else None,
-                        tex_w=tex[1] if tex else 40,
-                        tex_h=tex[2] if tex else 20,
-                        bullet_texture=bullet_alien_tex[0] if bullet_alien_tex else None,
-                        bullet_tex_w=bullet_alien_tex[1] if bullet_alien_tex else 16,
-                        bullet_tex_h=bullet_alien_tex[2] if bullet_alien_tex else 16)
+                         texture=tex[0] if tex else None,
+                         tex_w=tex[1] if tex else 40,
+                         tex_h=tex[2] if tex else 20,
+                         bullet_texture=bullet_alien_tex[0] if bullet_alien_tex else None,
+                         bullet_tex_w=bullet_alien_tex[1] if bullet_alien_tex else 16,
+                         bullet_tex_h=bullet_alien_tex[2] if bullet_alien_tex else 16)
                     alien.som_tiro = som_tiro_alien
                     aliens.append(alien)
         if ship.lives <= 0:
             running = False
 
-    return "game_over" # Você pode retornar o estado de "game_over" para a função main()
+    highscores = load_highscores()
+    is_new_highscore = False
+    if not highscores or ship.score > highscores[-1]['score'] or len(highscores) < 10:
+        is_new_highscore = True
+    
+    if is_new_highscore:
+        return "enter_initials", ship.score
+    else:
+        return "game_over", ship.score
 
 def main():
     pygame.init()
@@ -459,8 +435,6 @@ def main():
     gluOrtho2D(0, WIDTH, 0, HEIGHT)
     glClearColor(0, 0, 0, 1)
 
-    # AQUI AS TEXTURAS SÃO CARREGADAS ANTES DO LOOP PRINCIPAL
-    # A função `load_texture` agora pode ser chamada aqui
     bg_texture = load_texture('space_bg.png', (128, 128))
     vidas_texture = load_texture('vidas.png', (24, 24))
     nave_texture = load_texture('nave.png', (32, 32))
@@ -478,14 +452,17 @@ def main():
 
     clock = pygame.time.Clock()
     game_state = "menu"
+    final_score = 0
 
     while game_state != "quit":
         if game_state == "menu":
             game_state = show_menu(bg_texture, clock)
         elif game_state == "start_game":
-            game_state = run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture)
+            game_state, final_score = run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture)
+        elif game_state == "enter_initials":
+            game_state, final_score = enter_initials_screen(bg_texture, clock, final_score)
         elif game_state == "game_over":
-            game_state = show_game_over(bg_texture, clock)
+            game_state, final_score = show_game_over(bg_texture, clock, load_highscores(), final_score)
     
     pygame.quit()
     quit()
