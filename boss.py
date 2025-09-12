@@ -10,18 +10,18 @@ WIDTH, HEIGHT = 800, 600
 # Dicionário de configurações dos bosses
 BOSS_CONFIGS = {
     "boss_1": {
-        "health": 150,
+        "health": 200,
         "speed": 4,
         "max_cooldown": 30,
-        "texture_file": 'img_boss_ship/boss_lv10.png',
+        "texture_file": 'img_boss_ship/boss_lv3.png',
         "texture_size": (100, 100),
         "attack_type": "tracking_shot"
     },
     "boss_2": {
-        "health": 170,
-        "speed": 4,
-        "max_cooldown": 20,
-        "texture_file": 'img_boss_ship/boss_lv5.png',
+        "health": 250,
+        "speed": 5,
+        "max_cooldown": 25,
+        "texture_file": 'img_boss_ship/boss_lv6.png',
         "texture_size": (100, 100),
         "attack_type": "spread_shot"
     }
@@ -37,6 +37,7 @@ class Boss:
         
         # Atribua as características do boss a partir do dicionário de configuração
         self.health = config["health"]
+        self.max_health = config["health"]
         self.speed = config["speed"]
         self.max_cooldown = config["max_cooldown"]
         self.attack_type = config["attack_type"]
@@ -163,8 +164,30 @@ class Boss:
             glDisable(GL_TEXTURE_2D)
             glDisable(GL_BLEND)
             
-            glColor3f(1, 0, 0)
-            glRectf(self.x - 50, self.y + self.tex_h // 2 + 10, self.x - 50 + self.health, self.y + self.tex_h // 2 + 18)
+            # --- Lógica da barra de vida fixa e centralizada ---
+            fixed_bar_width = 100 # Largura fixa da barra de vida (em pixels)
+            fixed_bar_height = 8 # Altura fixa da barra de vida (em pixels)
+            
+            # Posição central da barra (alinhada com o boss)
+            bar_center_x = self.x
+            bar_y = self.y + self.tex_h // 2 + 10 # Posição Y, um pouco abaixo do boss
+
+            # Posição inicial (canto esquerdo) da barra de vida
+            bar_start_x = bar_center_x - (fixed_bar_width / 2)
+            
+            # Desenha a barra de fundo (barra vazia)
+            glColor3f(0.3, 0.3, 0.3) # Cor cinza escuro para o fundo da barra
+            glRectf(bar_start_x, bar_y, bar_start_x + fixed_bar_width, bar_y + fixed_bar_height)
+
+            # Calcula a porcentagem de vida atual
+            health_percentage = self.health / self.max_health
+            
+            # Calcula a largura da barra de vida preenchida
+            current_bar_width = fixed_bar_width * health_percentage
+            
+            # Desenha a barra de vida preenchida
+            glColor3f(1, 0, 0) 
+            glRectf(bar_start_x, bar_y, bar_start_x + current_bar_width, bar_y + fixed_bar_height)
         
         for b in self.bullets:
             if self.bullet_texture:
