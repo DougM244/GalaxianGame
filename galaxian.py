@@ -6,6 +6,7 @@ import random
 import os
 import json
 from menu import show_menu, show_game_over
+from boss import Boss
 
 WIDTH, HEIGHT = 800, 600
 SHIP_WIDTH, SHIP_HEIGHT = 60, 20
@@ -287,6 +288,8 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
     base = 5
     espacamento_x = 60
     espacamento_y = 40
+    boss = None
+
     for l in range(linhas):
         n_aliens = base + l
         largura_total = (n_aliens-1) * espacamento_x
@@ -327,42 +330,76 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
 
         ship.update()
         attack_timer += 1
-        if attack_timer > attack_interval:
-            attack_timer = 0
-            attackers = [a for a in aliens if a.alive and not a.attacking]
-            if attackers:
-                random.choice(attackers).attack()
-        borda_direita = max([alien.x for alien in aliens if alien.alive], default=0) + ALIEN_WIDTH//2
-        borda_esquerda = min([alien.x for alien in aliens if alien.alive], default=WIDTH) - ALIEN_WIDTH//2
-        if borda_direita >= WIDTH:
-            alien_dir = -1
-        if borda_esquerda <= 0:
-            alien_dir = 1
-        for alien in aliens:
-            if alien.alive:
-                alien.x += alien_dir * alien_speed
-            alien.update()
-        for b in ship.bullets[:]:
+        if aliens and not boss:
+            if attack_timer > attack_interval:
+                attack_timer = 0
+                attackers = [a for a in aliens if a.alive and not a.attacking]
+                if attackers:
+                    random.choice(attackers).attack()
+            borda_direita = max([alien.x for alien in aliens if alien.alive], default=0) + ALIEN_WIDTH//2
+            borda_esquerda = min([alien.x for alien in aliens if alien.alive], default=WIDTH) - ALIEN_WIDTH//2
+            if borda_direita >= WIDTH:
+                alien_dir = -1
+            if borda_esquerda <= 0:
+                alien_dir = 1
             for alien in aliens:
-                if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
-                    alien.alive = False
-                    ship.score += 1
-                    ship.bullets.remove(b)
-                    som_explosao.play()
-                    break
-        for alien in aliens:
-            if alien.attacking and alien.bullet:
-                if abs(alien.bullet[0]-ship.x)<SHIP_WIDTH//2 and abs(alien.bullet[1]-ship.y)<SHIP_HEIGHT//2:
-                    ship.lives -= 1
-                    som_perde_vida.play()
-                    alien.attacking = False
-                    alien.bullet = None
+                if alien.alive:
+                    alien.x += alien_dir * alien_speed
+                alien.update()
+            for b in ship.bullets[:]:
+                for alien in aliens:
+                    if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
+                        alien.alive = False
+                        ship.score += 1
+                        ship.bullets.remove(b)
+                        som_explosao.play()
+                        break
+            for alien in aliens:
+                if alien.attacking and alien.bullet:
+                    if abs(alien.bullet[0]-ship.x)<SHIP_WIDTH//2 and abs(alien.bullet[1]-ship.y)<SHIP_HEIGHT//2:
+                        ship.lives -= 1
+                        som_perde_vida.play()
+                        alien.attacking = False
+                        alien.bullet = None
         glClear(GL_COLOR_BUFFER_BIT)
         if bg_texture:
             draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
         ship.draw()
         for alien in aliens:
             alien.draw()
+        
+        # Lógica do Boss
+        if boss:
+            boss.update()
+            boss.draw()
+
+            # Colisão dos tiros da nave com o boss
+            if boss:
+                for b in ship.bullets[:]:
+                    # Checa se o tiro colidiu com o boss (um simples teste de caixa de colisão)
+                    if (b[0] > boss.x - boss.tex_w / 2 and b[0] < boss.x + boss.tex_w / 2 and
+                        b[1] > boss.y - boss.tex_h / 2 and b[1] < boss.y + boss.tex_h / 2):
+                        
+                        # Tira vida do boss e remove o tiro
+                        ship.bullets.remove(b)
+                        if boss.take_damage(5): # Cada tiro tira 5 de vida
+                            # Boss derrotado
+                            boss = None
+                            som_explosao.play()
+                            ship.score += 100 # Pontos extras por derrotar o boss
+                            break
+                            # Você pode adicionar mais lógica aqui, como ir para o próximo nível
+
+            # Colisão dos tiros do boss com a nave
+            if boss:
+                for b in boss.bullets[:]:
+                    if (abs(b[0] - ship.x) < SHIP_WIDTH / 2 and
+                        abs(b[1] - ship.y) < SHIP_HEIGHT / 2):
+                        
+                        ship.lives -= 1
+                        som_perde_vida.play()
+                        boss.bullets.remove(b)
+
         if vidas_texture:
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -393,27 +430,35 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
 
         pygame.display.flip()
         clock.tick(30)
-        if not any(a.alive for a in aliens):
+        if not any(a.alive for a in aliens) and not boss:
             nivel += 1
             alien_speed += 1
             attack_interval = max(10, attack_interval - 5)
             aliens = []
-            for l in range(linhas):
-                n_aliens = base + l
-                largura_total = (n_aliens-1) * espacamento_x
-                y = HEIGHT - 60 - l*espacamento_y
-                for i in range(n_aliens):
-                    x = WIDTH//2 - largura_total//2 + i*espacamento_x
-                    tex = random.choice(alien_textures) if alien_textures else None
-                    alien = Alien(x, y,
-                         texture=tex[0] if tex else None,
-                         tex_w=tex[1] if tex else 40,
-                         tex_h=tex[2] if tex else 20,
-                         bullet_texture=bullet_alien_tex[0] if bullet_alien_tex else None,
-                         bullet_tex_w=bullet_alien_tex[1] if bullet_alien_tex else 16,
-                         bullet_tex_h=bullet_alien_tex[2] if bullet_alien_tex else 16)
-                    alien.som_tiro = som_tiro_alien
-                    aliens.append(alien)
+
+            if nivel == 2:
+                # Cria o boss no nível 5
+                boss_tex = load_texture('img_boss_ship/boss_lv5.png', (100, 100)) # Exemplo de textura para o boss
+                boss_bullet_tex = bullet_alien_tex
+                boss_som_tiro = som_tiro_alien
+                boss = Boss(boss_tex, boss_bullet_tex, boss_som_tiro)
+            else:
+                for l in range(linhas):
+                    n_aliens = base + l
+                    largura_total = (n_aliens-1) * espacamento_x
+                    y = HEIGHT - 60 - l*espacamento_y
+                    for i in range(n_aliens):
+                        x = WIDTH//2 - largura_total//2 + i*espacamento_x
+                        tex = random.choice(alien_textures) if alien_textures else None
+                        alien = Alien(x, y,
+                            texture=tex[0] if tex else None,
+                            tex_w=tex[1] if tex else 40,
+                            tex_h=tex[2] if tex else 20,
+                            bullet_texture=bullet_alien_tex[0] if bullet_alien_tex else None,
+                            bullet_tex_w=bullet_alien_tex[1] if bullet_alien_tex else 16,
+                            bullet_tex_h=bullet_alien_tex[2] if bullet_alien_tex else 16)
+                        alien.som_tiro = som_tiro_alien
+                        aliens.append(alien)
         if ship.lives <= 0:
             running = False
 
