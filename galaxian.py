@@ -6,7 +6,7 @@ import random
 import os
 import json
 from menu import show_menu, show_game_over, show_shop
-from boss import Boss
+from boss import Boss, BOSS_CONFIGS
 
 WIDTH, HEIGHT = 800, 600
 SHIP_WIDTH, SHIP_HEIGHT = 60, 20
@@ -394,7 +394,7 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
         
         # Lógica do Boss
         if boss:
-            boss.update()
+            boss.update(ship)
             boss.draw()
 
             if boss:
@@ -456,13 +456,16 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             alien_speed += 1
             attack_interval = max(10, attack_interval - 5)
             aliens = []
-            
-            # Adicionei a verificação para o boss no nível 5
-            if nivel == 5:
-                boss_tex = load_texture('img_boss_ship/boss_lv5.png', (100, 100))
-                boss_bullet_tex = bullet_alien_tex
-                boss_som_tiro = som_tiro_alien
-                boss = Boss(boss_tex, boss_bullet_tex, boss_som_tiro)
+
+            # Adicionei a verificação para o boss no nível 3
+            if nivel == 3:
+                boss_config = BOSS_CONFIGS["boss_1"]
+                boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
+                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
+            elif nivel == 6: # Nível 6 para o segundo boss
+                boss_config = BOSS_CONFIGS["boss_2"]
+                boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
+                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
             else:
                 for l in range(linhas):
                     n_aliens = base + l
