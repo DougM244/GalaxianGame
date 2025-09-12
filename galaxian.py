@@ -4,6 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import random
 import os
+from menu import show_menu
 
 WIDTH, HEIGHT = 800, 600
 SHIP_WIDTH, SHIP_HEIGHT = 60, 20
@@ -192,60 +193,43 @@ def draw_text(x, y, text, size=24):
     glRasterPos2i(x, HEIGHT - y - text_surface.get_height())
     glDrawPixels(text_surface.get_width(), text_surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, text_data)
 
-def main():
-    def load_texture(filename, size=None):
-        if not os.path.exists(filename):
-            return None
-        img = pygame.image.load(filename).convert_alpha()
-        if size:
-            img = pygame.transform.smoothscale(img, size)
-        img_data = pygame.image.tostring(img, "RGBA", True)
-        width, height = img.get_size()
-        tex_id = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, tex_id)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
-        return tex_id, width, height
+def load_texture(filename, size=None):
+    if not os.path.exists(filename):
+        print(f"Erro: Arquivo de textura não encontrado: {filename}")
+        return None
+    img = pygame.image.load(filename).convert_alpha()
+    if size:
+        img = pygame.transform.smoothscale(img, size)
+    img_data = pygame.image.tostring(img, "RGBA", True)
+    width, height = img.get_size()
+    tex_id = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, tex_id)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
+    return tex_id, width, height
 
-    pygame.init()
-    pygame.mixer.init()
+def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture):
+    """
+    Função principal que contém o loop do jogo.
+    """
     pygame.mixer.music.load('musica.mp3')
     pygame.mixer.music.play(-1)
 
     som_tiro = pygame.mixer.Sound('tiro.mp3')
     som_tiro_alien = pygame.mixer.Sound('tiro_alien.mp3')
     som_explosao = pygame.mixer.Sound('explosao.mp3')
-    som_perde_vida = pygame.mixer.Sound('perde_vida.mp3')  # Som ao perder vida
+    som_perde_vida = pygame.mixer.Sound('perde_vida.mp3')
 
-    pygame.display.set_mode((WIDTH, HEIGHT), DOUBLEBUF | OPENGL)
-    gluOrtho2D(0, WIDTH, 0, HEIGHT)
-    glClearColor(0, 0, 0, 1)
-    clock = pygame.time.Clock()
-
-    bg_texture = load_texture('space_bg.png', (128, 128))
-    vidas_texture = load_texture('vidas.png', (24, 24))
-    nave_texture = load_texture('nave.png', (32, 32))
-    alien_textures = []
-    for fname in ['ufoBlue.png', 'ufoGreen.png', 'ufoRed.png', 'ufoYellow.png']:
-        tex = load_texture(fname, (32, 32))
-        if tex:
-            alien_textures.append(tex)
-    bullet_ship_tex = load_texture('disparoNave.png', (8, 16))
-    bullet_alien_tex = load_texture('disparoAlien.png', (8, 16))
-    numeros_texture = []
-    for i in range(10):
-        tex = load_texture(f'{i}.png', (24, 32))
-        numeros_texture.append(tex)
     if nave_texture:
         ship = Ship(texture=nave_texture[0], tex_w=nave_texture[1], tex_h=nave_texture[2],
-                   bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                   bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                   bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+                    bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
+                    bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
+                    bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
     else:
         ship = Ship(bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                   bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                   bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+                    bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
+                    bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
     ship.som_tiro = som_tiro
 
     aliens = []
@@ -269,12 +253,16 @@ def main():
                 bullet_tex_h=bullet_alien_tex[2] if bullet_alien_tex else 16)
             alien.som_tiro = som_tiro_alien
             aliens.append(alien)
+    
     running = True
     attack_timer = 0
     alien_dir = 1
     alien_speed = 2
     attack_interval = 40
     nivel = 1
+    
+    clock = pygame.time.Clock()
+
     while running:
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -284,7 +272,9 @@ def main():
             ship.move(-5)
         if keys[K_RIGHT]:
             ship.move(5)
-        ship.shoot()
+        if keys[K_SPACE] or keys[K_LCTRL]:
+            ship.shoot()
+
         ship.update()
         attack_timer += 1
         if attack_timer > attack_interval:
@@ -302,7 +292,6 @@ def main():
             if alien.alive:
                 alien.x += alien_dir * alien_speed
             alien.update()
-        # Colisão dos tiros da nave com alienígenas
         for b in ship.bullets[:]:
             for alien in aliens:
                 if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
@@ -311,12 +300,11 @@ def main():
                     ship.bullets.remove(b)
                     som_explosao.play()
                     break
-        # Colisão dos tiros dos alienígenas com a nave
         for alien in aliens:
             if alien.attacking and alien.bullet:
                 if abs(alien.bullet[0]-ship.x)<SHIP_WIDTH//2 and abs(alien.bullet[1]-ship.y)<SHIP_HEIGHT//2:
                     ship.lives -= 1
-                    som_perde_vida.play()  # Toca o som ao perder vida
+                    som_perde_vida.play()
                     alien.attacking = False
                     alien.bullet = None
         glClear(GL_COLOR_BUFFER_BIT)
@@ -375,7 +363,49 @@ def main():
                     aliens.append(alien)
         if ship.lives <= 0:
             running = False
+
+    return "game_over" # Você pode retornar o estado de "game_over" para a função main()
+
+def main():
+    pygame.init()
+    pygame.mixer.init()
+
+    pygame.display.set_mode((WIDTH, HEIGHT), DOUBLEBUF | OPENGL)
+    gluOrtho2D(0, WIDTH, 0, HEIGHT)
+    glClearColor(0, 0, 0, 1)
+
+    # AQUI AS TEXTURAS SÃO CARREGADAS ANTES DO LOOP PRINCIPAL
+    # A função `load_texture` agora pode ser chamada aqui
+    bg_texture = load_texture('space_bg.png', (128, 128))
+    vidas_texture = load_texture('vidas.png', (24, 24))
+    nave_texture = load_texture('nave.png', (32, 32))
+    alien_textures = []
+    for fname in ['ufoBlue.png', 'ufoGreen.png', 'ufoRed.png', 'ufoYellow.png']:
+        tex = load_texture(fname, (32, 32))
+        if tex:
+            alien_textures.append(tex)
+    bullet_ship_tex = load_texture('disparoNave.png', (8, 16))
+    bullet_alien_tex = load_texture('disparoAlien.png', (8, 16))
+    numeros_texture = []
+    for i in range(10):
+        tex = load_texture(f'img_numbers/{i}.png', (24, 32))
+        numeros_texture.append(tex)
+
+    clock = pygame.time.Clock()
+    game_state = "menu"
+
+    while game_state != "quit":
+        if game_state == "menu":
+            game_state = show_menu(bg_texture, clock)
+        elif game_state == "start_game":
+            game_state = run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture)
+        elif game_state == "game_over":
+            print("Game Over! Voltando para o menu...")
+            pygame.time.wait(2000)
+            game_state = "menu"
+    
     pygame.quit()
+    quit()
 
 if __name__ == '__main__':
     main()
