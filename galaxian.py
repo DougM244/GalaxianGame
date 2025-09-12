@@ -5,7 +5,7 @@ from OpenGL.GLU import *
 import random
 import os
 import json
-from menu import show_menu, show_game_over
+from menu import show_menu, show_game_over, show_shop
 from boss import Boss
 
 WIDTH, HEIGHT = 800, 600
@@ -53,6 +53,7 @@ class Ship:
         self.y = 40
         self.lives = 3
         self.score = 0
+        self.coins = 0
         self.bullets = []
         self.cooldown = 0
         self.texture = texture
@@ -62,15 +63,17 @@ class Ship:
         self.bullet_tex_w = bullet_tex_w
         self.bullet_tex_h = bullet_tex_h
         self.som_tiro = None
+        self.speed = 5
+        self.fire_rate = 10
 
     def move(self, dx):
-        self.x += dx
+        self.x += dx * self.speed
         self.x = max(SHIP_WIDTH//2, min(WIDTH-SHIP_WIDTH//2, self.x))
 
     def shoot(self):
         if self.cooldown == 0:
             self.bullets.append([self.x, self.y + SHIP_HEIGHT//2])
-            self.cooldown = 10
+            self.cooldown = self.fire_rate
             if self.som_tiro:
                 self.som_tiro.play()
 
@@ -219,6 +222,25 @@ def load_highscores():
             return json.load(f)
     return []
 
+def save_player_data(data):
+    with open('player_data.json', 'w') as f:
+        json.dump(data, f, indent=4) # Adicionei indent para facilitar a leitura
+
+def load_player_data():
+    if os.path.exists('player_data.json'):
+        with open('player_data.json', 'r') as f:
+            try:
+                # Tenta carregar o arquivo.
+                return json.load(f)
+            except json.JSONDecodeError:
+                # Se o arquivo estiver vazio ou corrompido,
+                # retorna os dados padrão.
+                print("player_data.json está vazio ou corrompido. Criando novo arquivo...")
+    
+    default_data = {"coins": 0, "current_ship": "nave.png", "unlocked_ships": ["nave.png"]}
+    save_player_data(default_data)
+    return default_data
+
 def enter_initials_screen(bg_texture, clock, score):
     initials = ['A', 'A', 'A']
     selected_char = 0
@@ -263,7 +285,7 @@ def enter_initials_screen(bg_texture, clock, score):
         pygame.display.flip()
         clock.tick(30)
 
-def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture):
+def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, ship_attributes):
     pygame.mixer.music.load('musica.mp3')
     pygame.mixer.music.play(-1)
 
@@ -272,15 +294,15 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
     som_explosao = pygame.mixer.Sound('explosao.mp3')
     som_perde_vida = pygame.mixer.Sound('perde_vida.mp3')
 
-    if nave_texture:
-        ship = Ship(texture=nave_texture[0], tex_w=nave_texture[1], tex_h=nave_texture[2],
-                     bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                     bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                     bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
-    else:
-        ship = Ship(bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
-                     bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
-                     bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+    # Cria a nave com os atributos passados
+    ship = Ship(texture=ship_texture_data[0], tex_w=ship_texture_data[1], tex_h=ship_texture_data[2],
+                bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
+                bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
+                bullet_tex_h=bullet_ship_tex[2] if bullet_ship_tex else 16)
+    
+    ship.lives = ship_attributes["lives"]
+    ship.speed = ship_attributes["speed"]
+    ship.fire_rate = ship_attributes["fire_rate"]
     ship.som_tiro = som_tiro
 
     aliens = []
@@ -351,6 +373,7 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
                     if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
                         alien.alive = False
                         ship.score += 1
+                        ship.coins += 1 # Ganha uma moeda por alien
                         ship.bullets.remove(b)
                         som_explosao.play()
                         break
@@ -361,6 +384,7 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
                         som_perde_vida.play()
                         alien.attacking = False
                         alien.bullet = None
+        
         glClear(GL_COLOR_BUFFER_BIT)
         if bg_texture:
             draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
@@ -373,24 +397,19 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
             boss.update()
             boss.draw()
 
-            # Colisão dos tiros da nave com o boss
             if boss:
                 for b in ship.bullets[:]:
-                    # Checa se o tiro colidiu com o boss (um simples teste de caixa de colisão)
                     if (b[0] > boss.x - boss.tex_w / 2 and b[0] < boss.x + boss.tex_w / 2 and
                         b[1] > boss.y - boss.tex_h / 2 and b[1] < boss.y + boss.tex_h / 2):
                         
-                        # Tira vida do boss e remove o tiro
                         ship.bullets.remove(b)
-                        if boss.take_damage(5): # Cada tiro tira 5 de vida
-                            # Boss derrotado
+                        if boss.take_damage(5):
                             boss = None
                             som_explosao.play()
-                            ship.score += 100 # Pontos extras por derrotar o boss
+                            ship.score += 100
+                            ship.coins += 10 # Ganha 10 moedas pelo boss
                             break
-                            # Você pode adicionar mais lógica aqui, como ir para o próximo nível
-
-            # Colisão dos tiros do boss com a nave
+            
             if boss:
                 for b in boss.bullets[:]:
                     if (abs(b[0] - ship.x) < SHIP_WIDTH / 2 and
@@ -427,18 +446,20 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
         draw_num(WIDTH - score_w - 20, HEIGHT - 40, ship.score, numeros_texture)
         
         draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
+        draw_text(60, 50, f"Coins: {ship.coins}", size=24) # Exibe as moedas
 
         pygame.display.flip()
         clock.tick(30)
+        
         if not any(a.alive for a in aliens) and not boss:
             nivel += 1
             alien_speed += 1
             attack_interval = max(10, attack_interval - 5)
             aliens = []
-
-            if nivel == 2:
-                # Cria o boss no nível 5
-                boss_tex = load_texture('img_boss_ship/boss_lv5.png', (100, 100)) # Exemplo de textura para o boss
+            
+            # Adicionei a verificação para o boss no nível 5
+            if nivel == 5:
+                boss_tex = load_texture('img_boss_ship/boss_lv5.png', (100, 100))
                 boss_bullet_tex = bullet_alien_tex
                 boss_som_tiro = som_tiro_alien
                 boss = Boss(boss_tex, boss_bullet_tex, boss_som_tiro)
@@ -467,6 +488,11 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
     if not highscores or ship.score > highscores[-1]['score'] or len(highscores) < 10:
         is_new_highscore = True
     
+    # Adicionei a lógica para o jogo salvar as moedas ao final da partida
+    player_data = load_player_data()
+    player_data["coins"] += ship.coins
+    save_player_data(player_data)
+
     if is_new_highscore:
         return "enter_initials", ship.score
     else:
@@ -482,7 +508,14 @@ def main():
 
     bg_texture = load_texture('space_bg.png', (128, 128))
     vidas_texture = load_texture('vidas.png', (24, 24))
-    nave_texture = load_texture('nave.png', (32, 32))
+    
+    ship_textures = {
+        "nave.png": load_texture('nave.png', (32, 32)),
+        "playerShip1_red.png": load_texture('playerShip1_red.png', (32, 32)),
+        "playerShip2_orange.png": load_texture('playerShip2_orange.png', (32, 32)),
+        "playerShip3_green.png": load_texture('playerShip3_green.png', (32, 32))
+    }
+    
     alien_textures = []
     for fname in ['ufoBlue.png', 'ufoGreen.png', 'ufoRed.png', 'ufoYellow.png']:
         tex = load_texture(fname, (32, 32))
@@ -494,16 +527,32 @@ def main():
     for i in range(10):
         tex = load_texture(f'img_numbers/{i}.png', (24, 32))
         numeros_texture.append(tex)
+    coin_texture = load_texture('coin.png', (16, 16))
 
+    player_data = load_player_data()
+    
     clock = pygame.time.Clock()
     game_state = "menu"
     final_score = 0
+    
+    ship_attributes_dict = {
+        "nave.png": {"speed": 1.5, "lives": 3, "fire_rate": 10},
+        "playerShip1_red.png": {"speed": 3, "lives": 2, "fire_rate": 10},
+        "playerShip2_orange.png": {"speed": 0.75, "lives": 5, "fire_rate": 10},
+        "playerShip3_green.png": {"speed": 2, "lives": 3, "fire_rate": 7}
+    }
 
     while game_state != "quit":
         if game_state == "menu":
             game_state = show_menu(bg_texture, clock)
+        elif game_state == "shop":
+            game_state, player_data = show_shop(bg_texture, clock, player_data, coin_texture, ship_textures)
         elif game_state == "start_game":
-            game_state, final_score = run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture)
+            ship_file = player_data["current_ship"]
+            ship_texture_data = ship_textures[ship_file]
+            selected_ship_attrs = ship_attributes_dict[ship_file]
+            
+            game_state, final_score = run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, selected_ship_attrs)
         elif game_state == "enter_initials":
             game_state, final_score = enter_initials_screen(bg_texture, clock, final_score)
         elif game_state == "game_over":
