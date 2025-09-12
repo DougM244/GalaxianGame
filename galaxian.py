@@ -209,6 +209,23 @@ def load_texture(filename, size=None):
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
     return tex_id, width, height
 
+def get_text_width(text, size=24):
+    font = pygame.font.SysFont('Arial', size)
+    text_surface = font.render(text, True, (255,255,255))
+    return text_surface.get_width()
+
+def draw_button(x, y, text, size=24, color=(255, 255, 255)):
+    font = pygame.font.SysFont('Arial', size)
+    text_surface = font.render(text, True, color)
+    text_data = pygame.image.tostring(text_surface, "RGBA", True)
+    width, height = text_surface.get_size()
+    
+    # Desenha o texto do botão
+    glRasterPos2i(x, HEIGHT - y - height)
+    glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
+    
+    return pygame.Rect(x, y, width, height)
+
 def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture):
     """
     Função principal que contém o loop do jogo.
@@ -262,11 +279,79 @@ def run_game(bg_texture, vidas_texture, nave_texture, alien_textures, bullet_shi
     nivel = 1
     
     clock = pygame.time.Clock()
+    paused = False
 
     while running:
         for event in pygame.event.get():
             if event.type == QUIT:
                 running = False
+            if event.type == KEYDOWN and event.key == K_ESCAPE:
+                paused = not paused
+                if paused:
+                    pygame.mixer.music.pause()
+                else:
+                    pygame.mixer.music.unpause()
+                    
+        if paused:
+            glClear(GL_COLOR_BUFFER_BIT)
+            if bg_texture:
+                draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
+            ship.draw()
+            for alien in aliens:
+                alien.draw()
+            if vidas_texture:
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                glEnable(GL_TEXTURE_2D)
+                glBindTexture(GL_TEXTURE_2D, vidas_texture[0])
+                for i in range(ship.lives):
+                    x = 20 + i*28
+                    y = HEIGHT-28
+                    glColor4f(1, 1, 1, 1)
+                    glBegin(GL_QUADS)
+                    glTexCoord2f(0, 0); glVertex2f(x, y)
+                    glTexCoord2f(1, 0); glVertex2f(x + vidas_texture[1], y)
+                    glTexCoord2f(1, 1); glVertex2f(x + vidas_texture[1], y + vidas_texture[2])
+                    glTexCoord2f(0, 1); glVertex2f(x, y + vidas_texture[2])
+                    glEnd()
+                glDisable(GL_TEXTURE_2D)
+                glDisable(GL_BLEND)
+
+            draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
+
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glColor4f(0, 0, 0, 0.5)
+            glBegin(GL_QUADS)
+            glVertex2f(0, 0); glVertex2f(WIDTH, 0)
+            glVertex2f(WIDTH, HEIGHT); glVertex2f(0, HEIGHT)
+            glEnd()
+            glDisable(GL_BLEND)
+
+            titulo = "PAUSADO"
+            draw_text(WIDTH//2 - get_text_width(titulo, 36)//2, HEIGHT//2 - 10, titulo, size=36)
+
+            subtitulo = "Pressione ESC para continuar"
+            draw_text(WIDTH//2 - get_text_width(subtitulo, 24)//2, HEIGHT//2 + 30, subtitulo, size=24)
+
+            voltar = "Voltar ao menu (Presione M)"
+            draw_text(WIDTH//2 - get_text_width(voltar, 28)//2, HEIGHT//2 + 80, voltar, size=28)
+
+            for e in pygame.event.get():
+                if e.type == QUIT:
+                    return "quit"
+                if e.type == KEYDOWN:
+                    if e.key == K_ESCAPE:
+                        paused = False
+                        pygame.mixer.music.unpause()
+                    elif e.key in (K_RETURN, K_m):
+                        pygame.mixer.music.stop()
+                        return "menu"
+
+            pygame.display.flip()
+            clock.tick(30)
+            continue
+        
         keys = pygame.key.get_pressed()
         if keys[K_LEFT]:
             ship.move(-5)
