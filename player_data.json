@@ -1,0 +1,7 @@
+{
+    "coins": 129,
+    "current_ship": "nave.png",
+    "unlocked_ships": [
+        "nave.png"
+    ]
+}

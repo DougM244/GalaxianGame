@@ -102,9 +102,11 @@ def show_game_over(bg_texture, clock, highscores, score):
         
         draw_text(WIDTH // 2 - 100, HEIGHT // 2 - 120, "HIGH SCORES", size=32)
         y_offset = HEIGHT // 2 - 80
-        for i, entry in enumerate(highscores):
-            score_text = f"{i+1}. {entry['initials']} - {entry['score']}"
-            draw_text(WIDTH // 2 - 100, y_offset + i * 30, score_text, size=24)
+        for i, score_entry in enumerate(highscores[:3]):
+            rank = i + 1
+            score_text = f"{rank}. {score_entry['initials']} - {score_entry['score']}"
+            draw_text(WIDTH // 2 - 100, y_offset, score_text, size=24)
+            y_offset += 30
             
         for i, option in enumerate(options):
             color = (255, 255, 255) if i == selected_option else (150, 150, 150)
@@ -156,16 +158,11 @@ def show_shop(bg_texture, clock, player_data, coin_texture, ship_textures):
                     
                     if selected_ship["file"] in player_data["unlocked_ships"]:
                         player_data["current_ship"] = selected_ship["file"]
-                        # Salvamos os dados após equipar a nave
-                        # É importante salvar aqui para que a escolha seja permanente
-                        # No entanto, a lógica de retorno para o menu já faz isso na main().
-                        # Então, vamos salvar somente se uma compra for feita.
                         return "menu", player_data
                     elif player_data["coins"] >= selected_ship["price"]:
                         player_data["coins"] -= selected_ship["price"]
                         player_data["unlocked_ships"].append(selected_ship["file"])
                         player_data["current_ship"] = selected_ship["file"]
-                        # Adicionamos a chamada para salvar os dados imediatamente após a compra
                         from galaxian import save_player_data
                         save_player_data(player_data)
                         return "menu", player_data

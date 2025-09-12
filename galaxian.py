@@ -12,6 +12,7 @@ WIDTH, HEIGHT = 800, 600
 SHIP_WIDTH, SHIP_HEIGHT = 60, 20
 ALIEN_WIDTH, ALIEN_HEIGHT = 40, 20
 BULLET_WIDTH, BULLET_HEIGHT = 5, 10
+POWERUP_SIZE = 32
 
 def draw_tiled_bg(tex_id, tw, th):
     glEnable(GL_TEXTURE_2D)
@@ -65,6 +66,14 @@ class Ship:
         self.som_tiro = None
         self.speed = 5
         self.fire_rate = 10
+        self.powerups = {
+            "speed": {"active": False, "timer": 0, "duration": 300},
+            "shield": {"active": False, "timer": 0, "duration": 300},
+            "double_shot": {"active": False, "timer": 0, "duration": 300}
+        }
+        self.initial_speed = self.speed
+        self.initial_fire_rate = self.fire_rate
+        self.shield_texture = None
 
     def move(self, dx):
         self.x += dx * self.speed
@@ -72,7 +81,11 @@ class Ship:
 
     def shoot(self):
         if self.cooldown == 0:
-            self.bullets.append([self.x, self.y + SHIP_HEIGHT//2])
+            if self.powerups["double_shot"]["active"]:
+                self.bullets.append([self.x - 10, self.y + SHIP_HEIGHT//2])
+                self.bullets.append([self.x + 10, self.y + SHIP_HEIGHT//2])
+            else:
+                self.bullets.append([self.x, self.y + SHIP_HEIGHT//2])
             self.cooldown = self.fire_rate
             if self.som_tiro:
                 self.som_tiro.play()
@@ -83,6 +96,32 @@ class Ship:
         for b in self.bullets:
             b[1] += 5
         self.bullets = [b for b in self.bullets if b[1] < HEIGHT]
+
+        for pu_type in self.powerups:
+            if self.powerups[pu_type]["active"]:
+                self.powerups[pu_type]["timer"] -= 1
+                if self.powerups[pu_type]["timer"] <= 0:
+                    self.deactivate_powerup(pu_type)
+        
+    def activate_powerup(self, pu_type):
+        if pu_type == "speed":
+            self.powerups["speed"]["active"] = True
+            self.powerups["speed"]["timer"] = self.powerups["speed"]["duration"]
+            self.speed = self.initial_speed * 1.5
+        elif pu_type == "shield":
+            self.powerups["shield"]["active"] = True
+            self.powerups["shield"]["timer"] = self.powerups["shield"]["duration"]
+        elif pu_type == "double_shot":
+            self.powerups["double_shot"]["active"] = True
+            self.powerups["double_shot"]["timer"] = self.powerups["double_shot"]["duration"]
+            self.fire_rate = self.initial_fire_rate // 2
+
+    def deactivate_powerup(self, pu_type):
+        self.powerups[pu_type]["active"] = False
+        if pu_type == "speed":
+            self.speed = self.initial_speed
+        elif pu_type == "double_shot":
+            self.fire_rate = self.initial_fire_rate
 
     def draw(self):
         if self.texture:
@@ -101,6 +140,25 @@ class Ship:
         else:
             glColor3f(0, 1, 1)
             glRectf(self.x-SHIP_WIDTH//2, self.y-SHIP_HEIGHT//2, self.x+SHIP_WIDTH//2, self.y+SHIP_HEIGHT//2)
+        
+        if self.powerups["shield"]["active"] and self.shield_texture:
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, self.shield_texture[0])
+            glColor4f(1, 1, 1, 1)
+            shield_size = 80
+            sx = self.x - shield_size / 2
+            sy = self.y - shield_size / 2
+            glBegin(GL_QUADS)
+            glTexCoord2f(0, 0); glVertex2f(sx, sy)
+            glTexCoord2f(1, 0); glVertex2f(sx + shield_size, sy)
+            glTexCoord2f(1, 1); glVertex2f(sx + shield_size, sy + shield_size)
+            glTexCoord2f(0, 1); glVertex2f(sx, sy + shield_size)
+            glEnd()
+            glDisable(GL_TEXTURE_2D)
+            glDisable(GL_BLEND)
+
         for b in self.bullets:
             if self.bullet_texture:
                 glEnable(GL_BLEND)
@@ -189,6 +247,35 @@ class Alien:
                 glColor3f(1, 1, 1)
                 glRectf(self.bullet[0]-BULLET_WIDTH//2, self.bullet[1], self.bullet[0]+BULLET_WIDTH//2, self.bullet[1]+BULLET_HEIGHT)
 
+class PowerUp:
+    def __init__(self, x, y, pu_type, texture):
+        self.x = x
+        self.y = y
+        self.pu_type = pu_type
+        self.texture = texture
+        self.size = POWERUP_SIZE
+
+    def update(self):
+        self.y -= 1
+
+    def draw(self):
+        if self.texture:
+            glEnable(GL_TEXTURE_2D)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glBindTexture(GL_TEXTURE_2D, self.texture[0])
+            glColor4f(1, 1, 1, 1)
+            x = self.x - self.size // 2
+            y = self.y - self.size // 2
+            glBegin(GL_QUADS)
+            glTexCoord2f(0, 0); glVertex2f(x, y)
+            glTexCoord2f(1, 0); glVertex2f(x + self.size, y)
+            glTexCoord2f(1, 1); glVertex2f(x + self.size, y + self.size)
+            glTexCoord2f(0, 1); glVertex2f(x, y + self.size)
+            glEnd()
+            glDisable(GL_TEXTURE_2D)
+            glDisable(GL_BLEND)
+
 def draw_text(x, y, text, size=24):
     font = pygame.font.SysFont('Arial', size)
     text_surface = font.render(text, True, (255,255,255), (0,0,0))
@@ -224,17 +311,14 @@ def load_highscores():
 
 def save_player_data(data):
     with open('player_data.json', 'w') as f:
-        json.dump(data, f, indent=4) # Adicionei indent para facilitar a leitura
+        json.dump(data, f, indent=4)
 
 def load_player_data():
     if os.path.exists('player_data.json'):
         with open('player_data.json', 'r') as f:
             try:
-                # Tenta carregar o arquivo.
                 return json.load(f)
             except json.JSONDecodeError:
-                # Se o arquivo estiver vazio ou corrompido,
-                # retorna os dados padrão.
                 print("player_data.json está vazio ou corrompido. Criando novo arquivo...")
     
     default_data = {"coins": 0, "current_ship": "nave.png", "unlocked_ships": ["nave.png"]}
@@ -279,7 +363,7 @@ def enter_initials_screen(bg_texture, clock, score):
         draw_text(WIDTH // 2 - 100, HEIGHT // 2 - 40, "Enter your initials:", size=24)
         draw_text(WIDTH // 2 - 50, HEIGHT // 2 + 10, "".join(initials), size=48)
         
-        x_pos_cursor = (WIDTH // 2 - 50) + (selected_char * 35) 
+        x_pos_cursor = (WIDTH // 2 - 50) + (selected_char * 35)
         draw_text(x_pos_cursor, HEIGHT // 2 + 50, "_", size=48)
 
         pygame.display.flip()
@@ -297,14 +381,12 @@ def draw_button(x, y, text, size=24, color=(255, 255, 255)):
     text_data = pygame.image.tostring(text_surface, "RGBA", True)
     width, height = text_surface.get_size()
     
-    # Desenha o texto do botão
     glRasterPos2i(x, HEIGHT - y - height)
     glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
     
     return pygame.Rect(x, y, width, height)
 
-
-def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, ship_attributes):
+def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, ship_attributes, powerup_textures, shield_texture):
     pygame.mixer.music.load('musica.mp3')
     pygame.mixer.music.play(-1)
 
@@ -313,7 +395,6 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
     som_explosao = pygame.mixer.Sound('explosao.mp3')
     som_perde_vida = pygame.mixer.Sound('perde_vida.mp3')
 
-    # Cria a nave com os atributos passados
     ship = Ship(texture=ship_texture_data[0], tex_w=ship_texture_data[1], tex_h=ship_texture_data[2],
                 bullet_texture=bullet_ship_tex[0] if bullet_ship_tex else None,
                 bullet_tex_w=bullet_ship_tex[1] if bullet_ship_tex else 16,
@@ -321,16 +402,23 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
     
     ship.lives = ship_attributes["lives"]
     ship.speed = ship_attributes["speed"]
+    ship.initial_speed = ship.speed
     ship.fire_rate = ship_attributes["fire_rate"]
+    ship.initial_fire_rate = ship.fire_rate
     ship.som_tiro = som_tiro
+    ship.shield_texture = shield_texture
 
     aliens = []
+    powerups = []
     linhas = 5
     base = 5
     espacamento_x = 60
     espacamento_y = 40
     boss = None
     paused = False
+    
+    powerup_spawn_counter = 0
+    powerup_spawn_threshold = random.randint(10, 30)
 
     for l in range(linhas):
         n_aliens = base + l
@@ -400,7 +488,6 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
 
             draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
 
-            # overlay translucido
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             glColor4f(0, 0, 0, 0.5)
@@ -421,9 +508,8 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
 
             pygame.display.flip()
             clock.tick(30)
-            continue  # não atualiza lógica enquanto pausado
+            continue
 
-        
         keys = pygame.key.get_pressed()
         if keys[K_LEFT]:
             ship.move(-5)
@@ -433,6 +519,21 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             ship.shoot()
 
         ship.update()
+        
+        for pu in powerups[:]:
+            pu.update()
+            if pu.y < 0:
+                powerups.remove(pu)
+            
+            if abs(pu.x - ship.x) < SHIP_WIDTH/2 and abs(pu.y - ship.y) < SHIP_HEIGHT/2:
+                powerups.remove(pu)
+                # Removed the som_powerup sound call here
+                if pu.pu_type == "life":
+                    if ship.lives < 5:
+                        ship.lives += 1
+                elif pu.pu_type in ["speed", "shield", "double_shot"]:
+                    ship.activate_powerup(pu.pu_type)
+        
         attack_timer += 1
         if aliens and not boss:
             if attack_timer > attack_interval:
@@ -455,15 +556,24 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
                     if alien.alive and abs(b[0]-alien.x)<ALIEN_WIDTH//2 and abs(b[1]-alien.y)<ALIEN_HEIGHT//2:
                         alien.alive = False
                         ship.score += 1
-                        ship.coins += 1 # Ganha uma moeda por alien
+                        ship.coins += 1
                         ship.bullets.remove(b)
                         som_explosao.play()
+                        
+                        powerup_spawn_counter += 1
+                        if powerup_spawn_counter >= powerup_spawn_threshold:
+                            pu_type = random.choice(list(powerup_textures.keys()))
+                            powerups.append(PowerUp(alien.x, alien.y, pu_type, powerup_textures[pu_type]))
+                            powerup_spawn_counter = 0
+                            powerup_spawn_threshold = random.randint(10, 30)
+                        
                         break
             for alien in aliens:
                 if alien.attacking and alien.bullet:
                     if abs(alien.bullet[0]-ship.x)<SHIP_WIDTH//2 and abs(alien.bullet[1]-ship.y)<SHIP_HEIGHT//2:
-                        ship.lives -= 1
-                        som_perde_vida.play()
+                        if not ship.powerups["shield"]["active"]:
+                            ship.lives -= 1
+                            som_perde_vida.play()
                         alien.attacking = False
                         alien.bullet = None
         
@@ -473,8 +583,9 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
         ship.draw()
         for alien in aliens:
             alien.draw()
+        for pu in powerups:
+            pu.draw()
         
-        # Lógica do Boss
         if boss:
             boss.update(ship)
             boss.draw()
@@ -489,16 +600,16 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
                             boss = None
                             som_explosao.play()
                             ship.score += 100
-                            ship.coins += 10 # Ganha 10 moedas pelo boss
+                            ship.coins += 10
                             break
             
             if boss:
                 for b in boss.bullets[:]:
                     if (abs(b[0] - ship.x) < SHIP_WIDTH / 2 and
                         abs(b[1] - ship.y) < SHIP_HEIGHT / 2):
-                        
-                        ship.lives -= 1
-                        som_perde_vida.play()
+                        if not ship.powerups["shield"]["active"]:
+                            ship.lives -= 1
+                            som_perde_vida.play()
                         boss.bullets.remove(b)
 
         if vidas_texture:
@@ -528,7 +639,7 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
         draw_num(WIDTH - score_w - 20, HEIGHT - 40, ship.score, numeros_texture)
         
         draw_num(WIDTH//2 - 20, HEIGHT - 40, nivel, numeros_texture)
-        draw_text(60, 50, f"Coins: {ship.coins}", size=24) # Exibe as moedas
+        draw_text(60, 50, f"Coins: {ship.coins}", size=24)
 
         pygame.display.flip()
         clock.tick(30)
@@ -538,13 +649,16 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             alien_speed += 1
             attack_interval = max(10, attack_interval - 5)
             aliens = []
+            
+            # Resetar o contador de power-up para um novo nível
+            powerup_spawn_counter = 0
+            powerup_spawn_threshold = random.randint(10, 30)
 
-            # Adicionei a verificação para o boss no nível 3
             if nivel == 3:
                 boss_config = BOSS_CONFIGS["boss_1"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
                 boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
-            elif nivel == 6: # Nível 6 para o segundo boss
+            elif nivel == 6:
                 boss_config = BOSS_CONFIGS["boss_2"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
                 boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
@@ -573,7 +687,6 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
     if not highscores or ship.score > highscores[-1]['score'] or len(highscores) < 10:
         is_new_highscore = True
     
-    # Adicionei a lógica para o jogo salvar as moedas ao final da partida
     player_data = load_player_data()
     player_data["coins"] += ship.coins
     save_player_data(player_data)
@@ -613,6 +726,15 @@ def main():
         tex = load_texture(f'img_numbers/{i}.png', (24, 32))
         numeros_texture.append(tex)
     coin_texture = load_texture('coin.png', (16, 16))
+    
+    powerup_textures = {
+        "life": load_texture('nave.png', (POWERUP_SIZE, POWERUP_SIZE)),
+        "speed": load_texture('bold_silver.png', (POWERUP_SIZE, POWERUP_SIZE)),
+        "shield": load_texture('shield_silver.png', (POWERUP_SIZE, POWERUP_SIZE)),
+        "double_shot": load_texture('star_silver.png', (POWERUP_SIZE, POWERUP_SIZE))
+    }
+    
+    shield_texture = load_texture('shield1.png', (128, 128))
 
     player_data = load_player_data()
     
@@ -637,7 +759,7 @@ def main():
             ship_texture_data = ship_textures[ship_file]
             selected_ship_attrs = ship_attributes_dict[ship_file]
             
-            game_state, final_score = run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, selected_ship_attrs)
+            game_state, final_score = run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bullet_ship_tex, bullet_alien_tex, numeros_texture, selected_ship_attrs, powerup_textures, shield_texture)
         elif game_state == "enter_initials":
             game_state, final_score = enter_initials_screen(bg_texture, clock, final_score)
         elif game_state == "game_over":
