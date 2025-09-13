@@ -690,11 +690,11 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             if nivel == 3:
                 boss_config = BOSS_CONFIGS["boss_1"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
-                boss = Boss(boss_config, boss_tex, None, bullet_alien_tex, som_tiro_alien)
+                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
             elif nivel == 6:
                 boss_config = BOSS_CONFIGS["boss_2"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
-                boss = Boss(boss_config, boss_tex, None, bullet_alien_tex, som_tiro_alien)
+                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
             else:
                 for l in range(linhas):
                     n_aliens = base + l

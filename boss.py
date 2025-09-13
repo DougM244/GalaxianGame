@@ -146,7 +146,7 @@ class Boss:
         self.health -= damage
         return self.health <= 0
 
-    def draw(self):
+    def draw(self, is_lit):
         if self.health > 0:
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
