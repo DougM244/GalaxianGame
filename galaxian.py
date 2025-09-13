@@ -14,6 +14,29 @@ ALIEN_WIDTH, ALIEN_HEIGHT = 40, 20
 BULLET_WIDTH, BULLET_HEIGHT = 5, 10
 POWERUP_SIZE = 32
 
+NUM_STARS = 100
+
+class Star:
+    def __init__(self):
+        self.x = random.randint(0, WIDTH)
+        self.y = random.randint(0, HEIGHT)
+        self.speed = random.uniform(1, 3)
+        self.size = random.uniform(1, 2)
+        self.color = (random.random(), random.random(), random.random())
+
+    def update(self):
+        self.y -= self.speed
+        if self.y < 0:
+            self.y = HEIGHT
+            self.x = random.randint(0, WIDTH)
+
+    def draw(self):
+        glPointSize(self.size)
+        glColor3f(*self.color)
+        glBegin(GL_POINTS)
+        glVertex2f(self.x, self.y)
+        glEnd()
+
 def draw_tiled_bg(tex_id, tw, th):
     glEnable(GL_TEXTURE_2D)
     glBindTexture(GL_TEXTURE_2D, tex_id)
@@ -123,11 +146,12 @@ class Ship:
         elif pu_type == "double_shot":
             self.fire_rate = self.initial_fire_rate
 
-    def draw(self):
+    def draw(self, is_lit):
         if self.texture:
             glEnable(GL_TEXTURE_2D)
             glBindTexture(GL_TEXTURE_2D, self.texture)
-            glColor3f(1, 1, 1)
+            color_factor = 1.0 if is_lit else 0.5
+            glColor3f(color_factor, color_factor, color_factor)
             x = self.x - self.tex_w // 2
             y = self.y - self.tex_h // 2
             glBegin(GL_QUADS)
@@ -208,12 +232,13 @@ class Alien:
                 self.attacking = False
                 self.bullet = None
 
-    def draw(self):
+    def draw(self, is_lit):
         if self.alive:
             if self.texture:
                 glEnable(GL_TEXTURE_2D)
                 glBindTexture(GL_TEXTURE_2D, self.texture)
-                glColor3f(1, 1, 1)
+                color_factor = 1.0 if is_lit else 0.5
+                glColor3f(color_factor, color_factor, color_factor)
                 x = self.x - self.tex_w // 2
                 y = self.y - self.tex_h // 2
                 glBegin(GL_QUADS)
@@ -445,6 +470,8 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
     nivel = 1
     
     clock = pygame.time.Clock()
+    stars = [Star() for _ in range(NUM_STARS)]
+    is_lit = True
 
     while running:
         for event in pygame.event.get():
@@ -460,14 +487,16 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
                 elif event.key in (K_RETURN, K_m):
                     pygame.mixer.music.stop()
                     return "menu", ship.score
+                elif event.key == K_l:
+                    is_lit = not is_lit
         
         if paused:
             glClear(GL_COLOR_BUFFER_BIT)
             if bg_texture:
                 draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
-            ship.draw()
+            ship.draw(is_lit)
             for alien in aliens:
-                alien.draw()
+                alien.draw(is_lit)
             if vidas_texture:
                 glEnable(GL_BLEND)
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -527,7 +556,6 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             
             if abs(pu.x - ship.x) < SHIP_WIDTH/2 and abs(pu.y - ship.y) < SHIP_HEIGHT/2:
                 powerups.remove(pu)
-                # Removed the som_powerup sound call here
                 if pu.pu_type == "life":
                     if ship.lives < 5:
                         ship.lives += 1
@@ -577,18 +605,24 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
                         alien.attacking = False
                         alien.bullet = None
         
+        for star in stars:
+            star.update()
+
         glClear(GL_COLOR_BUFFER_BIT)
         if bg_texture:
             draw_tiled_bg(bg_texture[0], bg_texture[1], bg_texture[2])
-        ship.draw()
+        for star in stars:
+            star.draw()
+            
+        ship.draw(is_lit)
         for alien in aliens:
-            alien.draw()
+            alien.draw(is_lit)
         for pu in powerups:
             pu.draw()
         
         if boss:
             boss.update(ship)
-            boss.draw()
+            boss.draw(is_lit)
 
             if boss:
                 for b in ship.bullets[:]:
@@ -650,18 +684,17 @@ def run_game(bg_texture, vidas_texture, ship_texture_data, alien_textures, bulle
             attack_interval = max(10, attack_interval - 5)
             aliens = []
             
-            # Resetar o contador de power-up para um novo nível
             powerup_spawn_counter = 0
             powerup_spawn_threshold = random.randint(10, 30)
 
             if nivel == 3:
                 boss_config = BOSS_CONFIGS["boss_1"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
-                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
+                boss = Boss(boss_config, boss_tex, None, bullet_alien_tex, som_tiro_alien)
             elif nivel == 6:
                 boss_config = BOSS_CONFIGS["boss_2"]
                 boss_tex = load_texture(boss_config["texture_file"], boss_config["texture_size"])
-                boss = Boss(boss_config, boss_tex, bullet_alien_tex, som_tiro_alien)
+                boss = Boss(boss_config, boss_tex, None, bullet_alien_tex, som_tiro_alien)
             else:
                 for l in range(linhas):
                     n_aliens = base + l
@@ -719,6 +752,7 @@ def main():
         tex = load_texture(fname, (32, 32))
         if tex:
             alien_textures.append(tex)
+
     bullet_ship_tex = load_texture('disparoNave.png', (8, 16))
     bullet_alien_tex = load_texture('disparoAlien.png', (8, 16))
     numeros_texture = []
